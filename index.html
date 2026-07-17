@@ -148,6 +148,7 @@
   .sbtn:hover{box-shadow:inset 0 0 0 1px var(--cyan),0 0 18px rgba(0,240,255,.2)}
   .sbtn[disabled]{opacity:.3;cursor:not-allowed;filter:grayscale(.4)}
   .gpsel{box-shadow:inset 0 0 0 2px var(--cyan),0 0 16px rgba(214,154,58,.5)!important}
+  #wire{display:none!important}
   #score{display:inline-block}
   #score.pulse{animation:scPulse .26s ease}
   @keyframes scPulse{0%{transform:scale(1)}45%{transform:scale(1.32);color:#fff}100%{transform:scale(1)}}
@@ -194,8 +195,8 @@
   <div class="card">
     <div class="eyebrow">Survive the Night</div>
     <h1>OUT<span class="n">//</span>BREAK</h1>
-    <p class="sub">OVERLORD&#8209;9 is flooding your grid with attack drones. Hold the arena.
-      Point, fire, don't let them reach you.</p>
+    <p class="sub">Night has fallen and the dead are coming in waves. Hold your ground,
+      pick your shots, and survive until dawn.</p>
     <div id="modesel"><span class="dl">Mode</span>
       <div class="dbtns">
         <button class="mb" data-m="0">Endless</button>
@@ -214,13 +215,14 @@
       <div><span class="k">VR</span> <b>Trigger</b> to fire &mdash; <b>hold</b> to charge a piercing blast.</div>
       <div><span class="k">Screen</span> <b>Drag/mouse</b> to aim, <b>tap/click</b> to fire, <b>hold</b> to charge.</div>
       <div><span class="k">Combo</span> chain hits without missing to multiply score.</div>
-      <div><span class="k">Danger</span> every drone that reaches you burns hull. Zero = down.</div>
+      <div><span class="k">Danger</span> every walker that reaches you costs health. Zero = you're down.</div>
+      <div><span class="k">Gamepad</span> <b>Right stick</b> aim, <b>RT</b> fire/charge, <b>Y</b> airstrike.</div>
     </div>
     <div id="initials">
       <div class="ib">TOP SCORE &mdash; ENTER YOUR CALLSIGN</div>
       <input id="ini" maxlength="3" autocomplete="off" spellcheck="false" placeholder="AAA" aria-label="Callsign">
     </div>
-    <div id="board"><div class="bt">Grid Defenders &mdash; Top Scores</div><div id="lblist"></div></div>
+    <div id="board"><div class="bt">Survivors &mdash; Top Scores</div><div id="lblist"></div></div>
     <div class="btns">
       <button id="btnVR">Enter VR</button>
       <button id="btnDesk" class="ghost">Play in Browser</button>
@@ -498,7 +500,7 @@ function setMute(m){G.muted=m;try{localStorage.setItem("outbreak_mute",m?"1":"0"
   if(MUSIC.g)MUSIC.g.gain.value=m?0:0.16;
   if(m&&"speechSynthesis"in window)try{speechSynthesis.cancel();}catch(e){}
   const b=document.getElementById("mute");if(b)b.innerHTML=(m?"&#9834; OFF":"&#9834; ON");}
-/* ---------- OVERLORD-9 villain voice (Web Speech API; swap in ElevenLabs later) ---------- */
+/* ---------- survivor radio voice (Web Speech API; swap in ElevenLabs later) ---------- */
 const VOICE={intro:["They're coming. Hold the line.","Ammo up. It's going to be a long night."],
   core:["Something big is moving out there.","More of them. Keep firing."],
   prime:["That one is not going down easy.","God, look at the size of it."],
@@ -547,7 +549,7 @@ const G={mode:"menu",score:0,wave:0,hp:100,mult:1,combo:0,comboT:0,
 try{G.best=+(localStorage.getItem("outbreak_best")||0);}catch(e){}
 try{G.muted=localStorage.getItem("outbreak_mute")==="1";}catch(e){}
 try{G.diff=Math.max(0,Math.min(2,+(localStorage.getItem("outbreak_diff")??1)));}catch(e){}
-try{G.wire=localStorage.getItem("outbreak_wire")!=="0";}catch(e){}
+try{G.wire=false;}catch(e){}
 try{G.invY=localStorage.getItem("outbreak_invy")==="1";}catch(e){}
 try{G.horde=localStorage.getItem("outbreak_horde")==="1";}catch(e){}
 const DIFFS=[{name:"EASY",spd:0.82,cnt:0.8,dmg:0.7,fire:0.5},
@@ -815,13 +817,30 @@ function drawAvatar(d){
 function drawZombie(d){
   const s=d.rs,bx=d.p[0],by=d.p[1],bz=d.p[2];
   const face=Math.atan2(HEAD[0]-bx,HEAD[2]-bz)+Math.sin(G.t*4+(d.ph||0))*0.12;
+  const cf=Math.cos(face),sf=Math.sin(face); // local +Z (forward → player) = [sf,0,cf]
+  // torso (tall, hunched)
   M.model(mModel,[bx,by,bz],1,face,0);
   mModel[0]*=0.5*s;mModel[1]*=0.5*s;mModel[2]*=0.5*s;
-  mModel[4]*=1.1*s;mModel[5]*=1.1*s;mModel[6]*=1.1*s;
-  mModel[8]*=0.34*s;mModel[9]*=0.34*s;mModel[10]*=0.34*s;
+  mModel[4]*=1.05*s;mModel[5]*=1.05*s;mModel[6]*=1.05*s;
+  mModel[8]*=0.32*s;mModel[9]*=0.32*s;mModel[10]*=0.32*s;
   setModel(mModel);col(d.col,0,1);draw(MESH.cube);
-  M.model(mModel,[bx,by+1.05*s,bz],0.3*s,face,0);setModel(mModel);
-  col([Math.min(1,d.col[0]+0.18),d.col[1]*0.75,d.col[2]*0.7],0,1);draw(MESH.cube);
+  // head
+  M.model(mModel,[bx,by+1.0*s,bz],0.3*s,face,0);setModel(mModel);
+  col([Math.min(1,d.col[0]+0.16),d.col[1]*0.72,d.col[2]*0.68],0,1);draw(MESH.cube);
+  // arms reaching forward toward the player
+  for(let side=-1;side<=1;side+=2){
+    const ax=bx+cf*side*0.42*s+sf*0.22*s, az=bz-sf*side*0.42*s+cf*0.22*s;
+    M.model(mModel,[ax,by+0.4*s,az],1,face,0);
+    mModel[0]*=0.15*s;mModel[1]*=0.15*s;mModel[2]*=0.15*s;
+    mModel[4]*=0.15*s;mModel[5]*=0.15*s;mModel[6]*=0.15*s;
+    mModel[8]*=0.6*s;mModel[9]*=0.6*s;mModel[10]*=0.6*s;
+    setModel(mModel);col([d.col[0]*0.88,d.col[1]*0.82,d.col[2]*0.78],0,1);draw(MESH.cube);
+  }
+  // glowing red eyes (emissive) — cut through the fog
+  for(let side=-1;side<=1;side+=2){
+    const ex=bx+sf*0.29*s+cf*side*0.09*s, ez=bz+cf*0.29*s-sf*side*0.09*s;
+    M.model(mModel,[ex,by+1.06*s,ez],0.045*s,0,0);setModel(mModel);col([1,.12,.05],1,1);draw(MESH.cube);
+  }
 }
 function renderScene(proj,view,cam){
   gl.useProgram(prog);
